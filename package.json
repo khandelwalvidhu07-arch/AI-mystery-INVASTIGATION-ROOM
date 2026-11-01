@@ -1,0 +1,25 @@
+{
+  "name": "ai-mystery-room",
+  "version": "1.0.0",
+  "description": "AI Mystery Room — Detective Deduction Game powered by Gemini and MongoDB",
+  "scripts": {
+    "install:server": "npm --prefix server install",
+    "install:client": "npm --prefix client install",
+    "install:all": "npm run install:server && npm run install:client",
+    "server": "node server/src/index.js",
+    "client": "npm --prefix client run dev",
+    "build:client": "npm --prefix client run build",
+    "test:server": "node server/test-runner.js"
+  },
+  "keywords": [
+    "gemini",
+    "ai",
+    "mystery",
+    "react",
+    "express",
+    "mongodb"
+  ],
+  "author": "Antigravity",
+  "license": "MIT"
+}
+
