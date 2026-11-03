@@ -1,6 +1,7 @@
 {
   "name": "ai-mystery-room",
   "version": "1.0.0",
+  "type": "module",
   "description": "AI Mystery Room — Detective Deduction Game powered by Gemini and MongoDB",
   "scripts": {
     "start": "node server/src/index.js",
@@ -12,6 +13,14 @@
     "client": "npm --prefix client run dev",
     "build:client": "npm --prefix client run build",
     "test:server": "node server/test-runner.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mongoose": "^8.9.5",
+    "zod": "^3.24.1"
   },
   "keywords": [
     "gemini",

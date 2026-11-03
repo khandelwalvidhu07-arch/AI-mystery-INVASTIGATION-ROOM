@@ -1,21 +1,24 @@
 import axios from 'axios';
 
 function getApiBaseUrl() {
-  const envUrl = import.meta.env.VITE_API_URL;
-  if (envUrl && envUrl.trim()) {
-    // If accessing from another LAN device and envUrl is hardcoded to localhost, adapt to current hostname
-    if (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-      if (envUrl.includes('localhost') || envUrl.includes('127.0.0.1')) {
-        return `http://${window.location.hostname}:5000/api`;
-      }
+  if (typeof window !== 'undefined') {
+    // If deployed on Vercel or any HTTPS site, use relative /api on the same domain
+    if (window.location.hostname.includes('vercel.app') || window.location.protocol === 'https:') {
+      return '/api';
     }
+    // If accessing from another LAN device (e.g. phone on same Wi-Fi)
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      return `http://${window.location.hostname}:5000/api`;
+    }
+  }
+
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && envUrl.trim() && !envUrl.includes('localhost')) {
     return envUrl;
   }
 
-  if (typeof window !== 'undefined' && window.location.hostname) {
-    return `http://${window.location.hostname}:5000/api`;
-  }
-  return 'http://localhost:5000/api';
+  // Local development fallback (Vite proxy forwards /api to backend port 5000)
+  return '/api';
 }
 
 export const api = axios.create({
