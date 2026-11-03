@@ -8,9 +8,27 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
-// Middleware
+// Middleware — flexible CORS that works on localhost AND across LAN / deployed environments
 app.use(cors({
-  origin: [CLIENT_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'],
+  origin: (origin, callback) => {
+    // Allow requests with no origin (Postman, curl, mobile apps, server-to-server)
+    if (!origin) return callback(null, true);
+
+    // Allow the explicitly configured CLIENT_URL (e.g. deployed Vercel/Netlify URL)
+    if (CLIENT_URL && origin === CLIENT_URL) return callback(null, true);
+
+    // Always allow localhost and 127.0.0.1 on any port (local dev)
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
+
+    // Allow any LAN IP (192.168.x.x, 10.x.x.x, 172.16-31.x.x) — fixes "other device" issue
+    if (/^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(origin)) {
+      return callback(null, true);
+    }
+
+    callback(new Error('CORS: Origin not allowed: ' + origin));
+  },
   credentials: true
 }));
 app.use(express.json());
@@ -42,8 +60,11 @@ app.use((err, req, res, next) => {
 async function startServer() {
   try {
     await connectDB();
-    app.listen(PORT, () => {
-      console.log(`🕵️ AI Mystery Room Server running on http://localhost:${PORT}`);
+    // Listen on 0.0.0.0 so the server is reachable from other devices on the same network
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🕵️ AI Mystery Room Server running on http://0.0.0.0:${PORT}`);
+      console.log(`   -> Local:   http://localhost:${PORT}`);
+      console.log(`   -> Network: accessible on all interfaces (LAN + deployed)`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
@@ -52,4 +73,3 @@ async function startServer() {
 }
 
 startServer();
-
