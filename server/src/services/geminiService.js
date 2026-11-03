@@ -45,7 +45,6 @@ const MysteryZodSchema = z.object({
  */
 function generateFallbackMystery(premise, difficulty) {
   const config = DIFFICULTY_CONFIG[difficulty] || DIFFICULTY_CONFIG.medium;
-  const timestamp = Date.now();
 
   const suspects = [
     {
@@ -153,7 +152,7 @@ function generateFallbackMystery(premise, difficulty) {
     }
   ].slice(0, config.hints);
 
-  const culprit = suspects[1]; // Vivian Vance
+  const culprit = suspects[1] || suspects[0];
 
   return {
     title: `The Mystery of ${premise.slice(0, 30)}...`,
@@ -165,18 +164,18 @@ function generateFallbackMystery(premise, difficulty) {
     hints: allHints.map(h => ({ ...h, isRevealed: false })),
     culpritId: culprit.id,
     culpritName: culprit.name,
-    solutionExplanation: `Vivian Vance executed the crime to satisfy her impending debts. Under the guise of taking a phone call on the veranda, she slipped into the study using the override code, staged the theft, and exited through the french doors where she snagged her emerald gown on the latch and left behind her signature white orchid fragrance.`
+    solutionExplanation: `${culprit.name} executed the crime to satisfy desperate personal motives. Slipping away unnoticed while alibis were being fabricated, they bypassed security and staged the incident, leaving behind subtle physical traces at the scene.`
   };
 }
 
 /**
- * Generate a complete mystery using Gemini API with Zod validation.
+ * Generate a complete mystery using Gemini API with multi-model fallback and Zod validation.
  */
 export async function generateMysteryWithGemini(premise, difficulty = 'medium') {
   const config = DIFFICULTY_CONFIG[difficulty] || DIFFICULTY_CONFIG.medium;
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
 
-  if (!apiKey || apiKey.trim() === '' || apiKey === 'your_gemini_api_key') {
+  if (!apiKey || apiKey === 'your_gemini_api_key') {
     console.warn('⚠️ GEMINI_API_KEY is not set. Generating high-quality procedural case fallback.');
     return generateFallbackMystery(premise, difficulty);
   }
@@ -197,7 +196,7 @@ RULES FOR LOGICAL CONSISTENCY:
 2. Give all suspects believable alibis and motives, but ensure only the true culprit's alibi falls apart when cross-referenced with the clues.
 3. Every clue must provide genuine forensic value (timestamps, physical evidence, witness statements, contradictory alibis, murder weapon, or stolen item location). At least 3 clues must directly implicate the true culprit while exonerating others.
 4. Hints must provide progressive detective nudges without giving away the answer directly.
-5. Provide a detailed, gripping "solutionExplanation" detailing the chronology of how the crime was executed, the true motive, and why the clues prove the culprit's guilt.
+5. Provide a detailed, gripping "solutionExplanation" detailing the chronology of how the crime was committed, the true motive, and why the clues prove the culprit's guilt.
 
 You must respond ONLY with a valid JSON object matching this schema:
 {
@@ -232,62 +231,79 @@ You must respond ONLY with a valid JSON object matching this schema:
 }
 `;
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    // Use gemini-1.5-flash or gemini-2.0-flash or gemini-1.5-pro
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.7
-      }
-    });
+  const candidateModels = [
+    process.env.GEMINI_MODEL,
+    'gemini-3.5-flash-lite',
+    'gemini-3.5-flash',
+    'gemini-3.8-flash',
+    'gemini-2.5-pro'
+  ].filter(Boolean);
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
-    
-    // Parse JSON
-    let parsedData;
+  const genAI = new GoogleGenerativeAI(apiKey);
+
+  for (const modelName of candidateModels) {
     try {
-      parsedData = JSON.parse(responseText);
-    } catch (parseError) {
-      // If there's markdown fences, strip them
-      const cleaned = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-      parsedData = JSON.parse(cleaned);
+      console.log(`🤖 Requesting case formulation from Gemini [${modelName}]...`);
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.7
+        }
+      });
+
+      const result = await model.generateContent(prompt);
+      const responseText = result.response.text();
+
+      // Robust JSON extraction
+      let parsedData;
+      try {
+        parsedData = JSON.parse(responseText);
+      } catch (parseError) {
+        const cleaned = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          parsedData = JSON.parse(jsonMatch[0]);
+        } else {
+          throw parseError;
+        }
+      }
+
+      // Validate with Zod
+      const validated = MysteryZodSchema.parse(parsedData);
+
+      // Ensure suspect IDs and counts conform to rules
+      const culpritExists = validated.suspects.some(s => s.id === validated.culpritId || s.name === validated.culpritName);
+      if (!culpritExists) {
+        validated.culpritId = validated.suspects[0].id;
+        validated.culpritName = validated.suspects[0].name;
+      }
+
+      console.log(`✅ Gemini [${modelName}] generated case: "${validated.title}"`);
+
+      return {
+        title: validated.title,
+        premise,
+        story: validated.story,
+        difficulty,
+        suspects: validated.suspects.slice(0, config.suspects),
+        clues: validated.clues.slice(0, config.clues).map(c => ({
+          ...c,
+          isDiscovered: false
+        })),
+        hints: validated.hints.slice(0, config.hints).map(h => ({
+          ...h,
+          isRevealed: false
+        })),
+        culpritId: validated.culpritId,
+        culpritName: validated.culpritName,
+        solutionExplanation: validated.solutionExplanation
+      };
+    } catch (err) {
+      console.warn(`⚠️ Gemini model [${modelName}] failed (${err.message}). Trying next candidate...`);
     }
-
-    // Validate with Zod
-    const validated = MysteryZodSchema.parse(parsedData);
-
-    // Ensure suspect IDs and counts conform to rules
-    const culpritExists = validated.suspects.some(s => s.id === validated.culpritId || s.name === validated.culpritName);
-    if (!culpritExists) {
-      validated.culpritId = validated.suspects[0].id;
-      validated.culpritName = validated.suspects[0].name;
-    }
-
-    return {
-      title: validated.title,
-      premise,
-      story: validated.story,
-      difficulty,
-      suspects: validated.suspects.slice(0, config.suspects),
-      clues: validated.clues.slice(0, config.clues).map(c => ({
-        ...c,
-        isDiscovered: false
-      })),
-      hints: validated.hints.slice(0, config.hints).map(h => ({
-        ...h,
-        isRevealed: false
-      })),
-      culpritId: validated.culpritId,
-      culpritName: validated.culpritName,
-      solutionExplanation: validated.solutionExplanation
-    };
-  } catch (err) {
-    console.error('❌ Gemini generation failed or schema validation error:', err.message);
-    console.log('Falling back to high-fidelity procedural case generation.');
-    return generateFallbackMystery(premise, difficulty);
   }
-}
 
+  console.error('❌ All Gemini model candidates failed or timed out. Falling back to procedural case generation.');
+  return generateFallbackMystery(premise, difficulty);
+}

@@ -1,8 +1,19 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
 import express from 'express';
 import cors from 'cors';
 import { connectDB } from './config/db.js';
 import caseRoutes from './routes/caseRoutes.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env from both server folder and root directory for maximum reliability
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -45,10 +56,20 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Root friendly welcome
-app.get('/', (req, res) => {
-  res.send('🕵️ AI Mystery Room API is running. Point your client to /api/cases.');
-});
+// Serve frontend static build if present (e.g., in production or unified build)
+const clientDistPath = path.resolve(__dirname, '../../client/dist');
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(clientDistPath, 'index.html'));
+  });
+} else {
+  // Root friendly welcome if frontend is running separately
+  app.get('/', (req, res) => {
+    res.send('🕵️ AI Mystery Room API is running. Point your client to /api/cases.');
+  });
+}
 
 // Global error handler
 app.use((err, req, res, next) => {

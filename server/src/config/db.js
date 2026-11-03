@@ -1,13 +1,15 @@
 import mongoose from 'mongoose';
 
 export async function connectDB() {
-  const uri = process.env.MONGODB_URI;
+  let uri = process.env.MONGODB_URI;
 
   try {
-    if (uri) {
+    if (uri && uri.trim() && uri.trim() !== 'your_mongodb_connection_string') {
+      // Strip any accidental whitespace/newlines inside URI
+      uri = uri.trim().replace(/\s+/g, '');
       console.log(`Connecting to MongoDB at: ${uri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@')}`);
       await mongoose.connect(uri, {
-        serverSelectionTimeoutMS: 4000,
+        serverSelectionTimeoutMS: 5000,
       });
       console.log('✅ Connected to MongoDB successfully.');
       return;
@@ -29,4 +31,3 @@ export async function connectDB() {
     throw memErr;
   }
 }
-

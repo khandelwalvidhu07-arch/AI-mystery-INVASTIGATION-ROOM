@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, Sparkles, Search, Fingerprint, Award, ChevronRight, HelpCircle, AlertTriangle } from 'lucide-react';
+import { Shield, Sparkles, Search, Fingerprint, Award, ChevronRight, HelpCircle, AlertTriangle, FolderArchive } from 'lucide-react';
 import { getCases } from '../api';
 
 export default function HomePage() {
